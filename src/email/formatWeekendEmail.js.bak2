@@ -1,0 +1,108 @@
+﻿const fs = require('fs');
+const path = require('path');
+
+function getLastWeekRuns() {
+  const runsDir = path.join(__dirname, '..', '..', 'data', 'runs');
+  if (!fs.existsSync(runsDir)) return [];
+  const files = fs.readdirSync(runsDir).filter(f => f.endsWith('.json'));
+  const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  return files.map(f => {
+    const full = path.join(runsDir, f);
+    try {
+      const stat = fs.statSync(full);
+      if (stat.mtimeMs < oneWeekAgo) return null;
+      return JSON.parse(fs.readFileSync(full, 'utf8'));
+    } catch { return null; }
+  }).filter(Boolean);
+}
+
+function summarizePerformance(runs) {
+  const debateRuns = runs.filter(r => r.isMajorNewsDay);
+  if (debateRuns.length === 0) {
+    return 'Markets were quiet this week - no high-conviction setups met our threshold. Discipline means sitting out when the data does not support a call.';
+  }
+  const decisions = debateRuns.map(r => (r.finalDecision && r.finalDecision.decision) || 'HOLD');
+  const longCount = decisions.filter(d => /long|buy/i.test(d)).length;
+  const shortCount = decisions.filter(d => /short|sell/i.test(d)).length;
+  const holdCount = decisions.length - longCount - shortCount;
+  return 'This week, EXAI ran ' + debateRuns.length + ' full debate' + (debateRuns.length > 1 ? 's' : '') +
+    ' across seven specialized AI agents - ' + longCount + ' bullish call' + (longCount === 1 ? '' : 's') + ', ' +
+    shortCount + ' bearish call' + (shortCount === 1 ? '' : 's') + ', and ' + holdCount + ' held for lack of edge.';
+}
+
+function impactLabel(impact) {
+  if (impact === 'high') return 'HIGH';
+  if (impact === 'medium') return 'MED';
+  return '';
+}
+
+function formatWeekendEmail(eventsResult, subscribers) {
+  const runs = getLastWeekRuns();
+  const perfSummary = summarizePerformance(runs);
+  const upcoming = (eventsResult && eventsResult.weekCalendarAll) || [];
+
+  const eventsHtml = upcoming.length
+    ? upcoming.slice(0, 8).map(function(e) {
+        return '<tr>' +
+          '<td style="padding:9px 0;border-bottom:1px solid #1a2035;color:#5fb8e0;font-weight:700;font-size:11px;letter-spacing:0.5px;width:50px;">' + e.currency + '</td>' +
+          '<td style="padding:9px 0;border-bottom:1px solid #1a2035;color:#d6dcec;font-size:13px;">' + e.event + '</td>' +
+          '<td style="padding:9px 0;border-bottom:1px solid #1a2035;color:#6b7590;font-size:10px;font-weight:700;text-align:center;width:44px;">' + impactLabel(e.impact) + '</td>' +
+          '<td style="padding:9px 0;border-bottom:1px solid #1a2035;color:#6b7590;font-size:11px;text-align:right;white-space:nowrap;">' + e.day + ' ' + e.time + '</td>' +
+          '</tr>';
+      }).join('')
+    : '<tr><td style="padding:9px 0;color:#6b7590;font-size:13px;">Nothing on the calendar yet for next week.</td></tr>';
+
+  const watermarkSvg =
+    '<svg width="220" height="220" viewBox="0 0 220 220" style="position:absolute;top:-40px;right:-40px;opacity:0.06;">' +
+    '<circle cx="110" cy="110" r="70" fill="none" stroke="#4facfe" stroke-width="1"/>' +
+    '<circle cx="110" cy="110" r="95" fill="none" stroke="#4facfe" stroke-width="1"/>' +
+    '<circle cx="110" cy="110" r="45" fill="#4facfe"/>' +
+    '</svg>';
+
+  const html = `
+  <div style="background:#05070D;padding:32px 16px;font-family:Arial,Helvetica,sans-serif;">
+    <div style="max-width:600px;margin:0 auto;background:#0a0e1a;border:1px solid #1a2035;border-radius:14px;overflow:hidden;position:relative;">
+      ${watermarkSvg}
+
+      <div style="padding:32px 28px 8px;position:relative;">
+        <p style="color:#5fb8e0;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin:0 0 6px;">EXAI Intelligence</p>
+        <h1 style="color:#ffffff;font-size:21px;margin:0 0 4px;font-weight:600;">Your Weekly Market Brief</h1>
+        <p style="color:#6b7590;font-size:13px;margin:0 0 24px;">The edge institutions have had for decades - now reading your markets.</p>
+
+        <p style="color:#d6dcec;font-size:14px;line-height:1.65;margin:0 0 26px;">${perfSummary}</p>
+
+        <h2 style="color:#ffffff;font-size:14px;margin:0 0 12px;font-weight:600;">What's On The Calendar Next Week</h2>
+        <table style="width:100%;border-collapse:collapse;margin-bottom:28px;">
+          ${eventsHtml}
+        </table>
+
+        <div style="background:#0d1424;border:1px solid #1a2035;border-radius:10px;padding:22px;margin-bottom:24px;">
+          <h3 style="color:#ffffff;font-size:14px;margin:0 0 10px;font-weight:600;">Why Traders Are Switching To EXAI</h3>
+          <p style="color:#b0b9d0;font-size:13px;line-height:1.7;margin:0 0 10px;">
+            Most tools show you data and leave the interpreting to you. EXAI does the interpreting - seven specialized AI analysts independently build the bull case, the bear case, and the risk case for every major move, then argue it out before you ever see a conclusion. You get the reasoning, not just a number on a screen.
+          </p>
+          <p style="color:#b0b9d0;font-size:13px;line-height:1.7;margin:0;">
+            No noise, no guesswork, no chasing headlines after the move already happened. Just a clear read on where the market stands, and why - built for traders who want to operate on the same footing as the institutions across the table from them.
+          </p>
+        </div>
+
+        <p style="color:#6b7590;font-size:12px;text-align:center;margin:0 0 4px;">Trading with someone who'd benefit from this? Forward it their way.</p>
+      </div>
+
+      <div style="padding:16px 28px;border-top:1px solid #1a2035;text-align:center;">
+        <p style="color:#454e68;font-size:10px;margin:0;">EXAI Intelligence - weekly briefing, built for traders who think several moves ahead.</p>
+      </div>
+    </div>
+  </div>
+  `;
+
+  const subject = 'Your EXAI Weekly Brief - this week\'s calls, next week\'s setups';
+
+  const list = Array.isArray(subscribers) ? subscribers : [];
+  return list.map(function(s) {
+    const email = typeof s === 'string' ? s : (s.email || s.Email || '');
+    return { to: email, subject: subject, html: html };
+  }).filter(function(item) { return !!item.to; });
+}
+
+module.exports = { formatWeekendEmail, getLastWeekRuns, summarizePerformance };

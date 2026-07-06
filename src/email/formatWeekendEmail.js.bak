@@ -1,0 +1,69 @@
+﻿const fs = require('fs');
+const path = require('path');
+
+function getLastWeekRuns() {
+  const runsDir = path.join(__dirname, '..', '..', 'data', 'runs');
+  if (!fs.existsSync(runsDir)) return [];
+  const files = fs.readdirSync(runsDir).filter(f => f.endsWith('.json'));
+  const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+  return files
+    .map(f => {
+      const full = path.join(runsDir, f);
+      try {
+        const stat = fs.statSync(full);
+        if (stat.mtimeMs < oneWeekAgo) return null;
+        return JSON.parse(fs.readFileSync(full, 'utf8'));
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+}
+
+function summarizePerformance(runs) {
+  const debateRuns = runs.filter(r => r.isMajorNewsDay);
+  if (debateRuns.length === 0) {
+    return 'A quiet week on the USD calendar - no major debates were triggered.';
+  }
+  const decisions = debateRuns.map(r => (r.finalDecision && r.finalDecision.decision) || 'HOLD');
+  const longCount = decisions.filter(d => /long|buy/i.test(d)).length;
+  const shortCount = decisions.filter(d => /short|sell/i.test(d)).length;
+  const holdCount = decisions.length - longCount - shortCount;
+  return 'EXAI ran ' + debateRuns.length + ' full debate' + (debateRuns.length > 1 ? 's' : '') +
+    ' this week - ' + longCount + ' long, ' + shortCount + ' short, ' + holdCount + ' hold call' + (decisions.length > 1 ? 's' : '') + '.';
+}
+
+function formatWeekendEmail(eventsResult, subscribers) {
+  const runs = getLastWeekRuns();
+  const perfSummary = summarizePerformance(runs);
+
+  const upcoming = (eventsResult && eventsResult.weekCalendarAll) || [];
+  const eventsHtml = upcoming.length
+    ? upcoming.slice(0, 10).map(function(e) {
+        return '<li><strong>' + e.currency + '</strong> - ' + e.event + ' (' + e.impact + ') - ' + e.day + ' ' + e.time + '</li>';
+      }).join('')
+    : '<li>No high or medium impact events currently on next week\'s calendar.</li>';
+
+  const html =
+    '<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #05070D;">' +
+    '<h2>Your EXAI Weekend Brief</h2>' +
+    '<p>' + perfSummary + '</p>' +
+    '<h3>Next Week Watchlist</h3>' +
+    '<ul>' + eventsHtml + '</ul>' +
+    '<hr style="margin:24px 0;border:none;border-top:1px solid #eee;" />' +
+    '<h3>What EXAI Does</h3>' +
+    '<p>Seven AI agents debate every major forex/gold move before it reaches you - fundamentals, sentiment, positioning, bull case, bear case, trader desk, and risk manager - so you see the argument, not just a signal.</p>' +
+    '<p>Know a trader? Forward this along.</p>' +
+    '</div>';
+
+  const subject = 'EXAI Weekend Brief - your week in review + what is next';
+
+  const list = Array.isArray(subscribers) ? subscribers : [];
+  return list.map(function(s) {
+    const email = typeof s === 'string' ? s : (s.email || s.Email || '');
+    return { to: email, subject: subject, html: html };
+  }).filter(function(item) { return !!item.to; });
+}
+
+module.exports = { formatWeekendEmail, getLastWeekRuns, summarizePerformance };
