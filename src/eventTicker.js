@@ -69,7 +69,7 @@ async function tickEventWatcher() {
 
         const telegramParsed = parseTelegram(telegramHtml);
         const newsResult = filterAndCategorizeNews(telegramParsed.telegramArticles);
-        const promptResult = preparePrompt(parsed, cotResult, fedwatchResult, actualsResult);
+        const promptResult = preparePrompt(parsed, cotResult, fedwatchResult, actualsResult, newsResult);
         const aiResult = await runDebateOrchestration(promptResult);
 
         const emailItems = formatPostReleaseEmail(action.event, action.actual, promptResult, aiResult, newsResult, subscribers);

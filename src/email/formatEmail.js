@@ -44,7 +44,10 @@ const breakingNews = newsNode.breakingNews || [];
 const allFiltered  = newsNode.allFiltered  || [];
 
 let aiText = '';
-try { aiText = aiNode.text || aiNode.content?.[0]?.text || aiNode.message?.content || ''; } catch(e){}
+try {
+  const fd = aiNode.finalDecision || {};
+  aiText = [fd.thesis, fd.bullArgument, fd.bearArgument].filter(Boolean).join('\n\n');
+} catch (e) {}
 
 const now       = new Date();
 const dateShort = now.toLocaleDateString('en-US',{month:'short',day:'numeric'});

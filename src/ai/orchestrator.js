@@ -53,9 +53,9 @@ async function runDebateOrchestration(contextData) {
       return { error: e.message, view: 'data unavailable' };
     });
 
-    results.agents.fundamentals = extractResult(Promise.resolve(fundamentalsResult), 'fundamentals');
-    results.agents.sentiment = extractResult(Promise.resolve(sentimentResult), 'sentiment');
-    results.agents.positioning = extractResult(Promise.resolve(positioningResult), 'positioning');
+    results.agents.fundamentals = extractResult(fundamentalsResult);
+    results.agents.sentiment = extractResult(sentimentResult);
+    results.agents.positioning = extractResult(positioningResult);
 
     console.log(`  ✓ Fundamentals: ${results.agents.fundamentals.status}`);
     console.log(`  ✓ Sentiment: ${results.agents.sentiment.status}`);
@@ -83,8 +83,8 @@ async function runDebateOrchestration(contextData) {
       return { error: e.message, argument: 'Bear case unavailable' };
     });
 
-    results.agents.bullCase = extractResult(Promise.resolve(bullResult), 'bullCase');
-    results.agents.bearCase = extractResult(Promise.resolve(bearResult), 'bearCase');
+    results.agents.bullCase = extractResult(bullResult);
+    results.agents.bearCase = extractResult(bearResult);
 
     console.log(`  ✓ Bull: ${results.agents.bullCase.status}`);
     console.log(`  ✓ Bear: ${results.agents.bearCase.status}`);
@@ -110,7 +110,7 @@ async function runDebateOrchestration(contextData) {
       return { error: e.message, decision: 'HOLD', conviction: 5 };
     });
 
-    results.agents.trader = extractResult(Promise.resolve(traderResult), 'trader');
+    results.agents.trader = extractResult(traderResult);
     console.log(`  ✓ Trader: ${results.agents.trader.status}`);
 
     // ============================================================
@@ -129,7 +129,7 @@ async function runDebateOrchestration(contextData) {
       return { error: e.message, approved: true, adjustedConviction: 5 };
     });
 
-    results.agents.riskManager = extractResult(Promise.resolve(riskResult), 'riskManager');
+    results.agents.riskManager = extractResult(riskResult);
     console.log(`  ✓ Risk: ${results.agents.riskManager.status}`);
 
     // ============================================================
@@ -156,19 +156,11 @@ async function runDebateOrchestration(contextData) {
 }
 
 /**
- * Extract result from Promise.allSettled, handling both success and rejection
+ * Wrap an agent's resolved value (each call site already awaits its
+ * promise and catches rejections into an { error, ... } fallback object,
+ * so there's no rejected case to handle here — only success vs. partial).
  */
-function extractResult(settledResult, agentName) {
-  if (settledResult.status === 'rejected') {
-    return {
-      status: 'failed',
-      error: settledResult.reason?.message || String(settledResult.reason),
-      output: null
-    };
-  }
-
-  const value = settledResult.value;
-  
+function extractResult(value) {
   if (value?.error) {
     return {
       status: 'partial',

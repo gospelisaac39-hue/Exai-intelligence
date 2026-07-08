@@ -66,7 +66,7 @@ async function riskManager(riskInputs = {}) {
   const cotData = riskInputs.cotData || [];
 
   const cotSummary = cotData.length > 0
-    ? cotData.slice(0, 3).map(c => `${c.instrument}: ${c.netLong > 0 ? 'LONG' : 'SHORT'}`).join(', ')
+    ? cotData.slice(0, 3).map(c => `${c.label || c.pair}: ${c.net > 0 ? 'LONG' : 'SHORT'}`).join(', ')
     : 'No COT data';
 
   const prompt = `You are a risk manager. Review the trader's decision and position sizing vs COT.

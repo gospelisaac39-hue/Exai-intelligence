@@ -33,7 +33,7 @@ async function callGroq(prompt) {
   }
 
   const analysis = data.choices[0].message.content;
-  return { text: analysis };
+  return analysis;
 }
 
 module.exports = { callGroq };

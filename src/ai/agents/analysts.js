@@ -13,10 +13,10 @@ async function fundamentalsAnalyst(contextData = {}) {
   const prompt = `You are a forex fundamentals analyst. Analyze the economic data and return your view in JSON.
 
 TODAY'S ECONOMIC EVENTS:
-${events.length > 0 ? events.map(e => `- ${e.time}: ${e.title} (Impact: ${e.impact})`).join('\n') : 'No high-impact events'}
+${events.length > 0 ? events.map(e => `- ${e.time}: ${e.event} (Impact: ${e.impact})`).join('\n') : 'No high-impact events'}
 
 ACTUAL DATA (Recent releases):
-${actuals.length > 0 ? actuals.map(a => `- ${a.indicator}: ${a.value} (Expected: ${a.expected}, Prior: ${a.prior})`).join('\n') : 'No recent actuals'}
+${actuals.length > 0 ? actuals.map(a => `- ${a.event}: ${a.actual} (Forecast: ${a.forecast}, Previous: ${a.previous})`).join('\n') : 'No recent actuals'}
 
 CHAIN CONTEXT:
 ${chain || 'No prior context'}
@@ -117,7 +117,7 @@ async function positioningAnalyst(contextData = {}) {
   const history = contextData.history || '';
 
   const cotSummary = cot.length > 0
-    ? cot.map(c => `${c.instrument}: ${c.netLong > 0 ? 'NET LONG' : 'NET SHORT'} (${Math.abs(c.netLong)} contracts)`).join('\n')
+    ? cot.map(c => `${c.label || c.pair}: ${c.net > 0 ? 'NET LONG' : 'NET SHORT'} (${Math.abs(c.net).toLocaleString()} contracts)`).join('\n')
     : 'No COT data';
 
   const fedSummary = fedwatch.length > 0

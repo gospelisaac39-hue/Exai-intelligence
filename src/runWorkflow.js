@@ -92,7 +92,7 @@ async function runWorkflow({ dryRun = false } = {}) {
 
     const resultWknd = { runTypeInfo, eventsResult: eventsResultWknd, emailItems: emailItemsWknd, sendResults: sendResultsWknd };
     const savedWknd = saveWorkflowResult(resultWknd);
-    logRunToSheet(savedWknd);
+    await logRunToSheet(savedWknd);
     return resultWknd;
   }
 
@@ -131,7 +131,8 @@ async function runWorkflow({ dryRun = false } = {}) {
     console.log(`  Emails sent: ${sendResults.filter((r) => r.ok).length}/${sendResults.length}\n`);
 
     const result = { runTypeInfo, eventsResult, emailItems, sendResults };
-    saveWorkflowResult(result);
+    const saved = saveWorkflowResult(result);
+    await logRunToSheet(saved);
     return result;
   }
 
@@ -169,7 +170,7 @@ async function runWorkflow({ dryRun = false } = {}) {
 
   // ---- Step 4: build prompt from all layers ----
   console.log('[4/6] Building prompt...');
-  const promptResult = preparePrompt(eventsResult, cotResult, fedwatchResult, actualsResult);
+  const promptResult = preparePrompt(eventsResult, cotResult, fedwatchResult, actualsResult, newsResult);
 
   // Fully automatic gate: a "major news day" is any day with at least
   // one high-impact USD event. On quiet days we skip the multi-agent debate
@@ -220,7 +221,8 @@ async function runWorkflow({ dryRun = false } = {}) {
   console.log(`  Emails sent: ${sendResults.filter((r) => r.ok).length}/${sendResults.length}\n`);
 
   const result = { runTypeInfo, eventsResult, newsResult, cotResult, fedwatchResult, promptResult, aiResult, emailItems, sendResults, isMajorNewsDay };
-  saveWorkflowResult(result);
+  const saved = saveWorkflowResult(result);
+  await logRunToSheet(saved);
   return result;
 }
 

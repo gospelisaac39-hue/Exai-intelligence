@@ -3,12 +3,13 @@
 // ============================================================
 // Returns three agent-specific context objects instead of one mega prompt
 
-function preparePrompt(eventsData, cotNode, fedwatchNode, actualsNode) {
+function preparePrompt(eventsData, cotNode, fedwatchNode, actualsNode, newsNode) {
   console.log('=== PREPARE PROMPT v4 (MULTI-AGENT) START ===');
   eventsData = eventsData || {};
   cotNode = cotNode || {};
   fedwatchNode = fedwatchNode || {};
   actualsNode = actualsNode || {};
+  newsNode = newsNode || {};
 
 const {
   date              = new Date().toISOString().split('T')[0],
@@ -33,24 +34,55 @@ const nextMeeting  = fedwatchNode.nextMeeting       || null;
 const allMeetings  = fedwatchNode.allMeetings       || [];
 const fedAvailable = fedwatchNode.fedwatchAvailable || false;
 
-// ── CLEAN ACTUALS — strip zero/noise entries from JBlanked ────
-const rawActuals   = actualsNode.actualsData || [];
+// ── PARSE / CLASSIFY HELPERS — the "Exai Indicators" sheet stores raw
+// actual/forecast strings (with %, K, M suffixes) and never populates a
+// quality/strength/outcome verdict, so we derive it here ─────────────
+function parseNumeric(val) {
+  if (val === undefined || val === null) return null;
+  const s = String(val).trim();
+  if (s === '' || /^(pending|n\/a)$/i.test(s)) return null;
+  const mult = /k$/i.test(s) ? 1e3 : /m$/i.test(s) ? 1e6 : /b$/i.test(s) ? 1e9 : 1;
+  const num = parseFloat(s.replace(/[,%kmb]/gi, ''));
+  return Number.isNaN(num) ? null : num * mult;
+}
 
-const cleanedActuals = rawActuals.filter(a => {
-  // Skip "Data Not Loaded" entries
-  if (a.outcome === 'Data Not Loaded') return false;
-  // Skip events where actual is "0" AND forecast is "0" — these are speeches/non-numeric
-  const actualNum   = parseFloat(a.actual);
-  const forecastNum = parseFloat(a.forecast);
-  if (actualNum === 0 && forecastNum === 0) return false;
-  // Skip if actual is literally "0" and previous is also "0" — no data
-  if (a.actual === '0' && a.previous === '0') return false;
-  // Must have a real currency
-  if (!a.currency || a.currency === '') return false;
-  return true;
-});
+const LOWER_IS_BETTER = /unemployment|jobless|claims|interest rate|fomc/i;
 
-console.log(`Actuals: ${rawActuals.length} raw → ${cleanedActuals.length} clean`);
+function classifyActual(a) {
+  const actual   = parseNumeric(a.actual);
+  const forecast = parseNumeric(a.forecast);
+  if (actual === null || forecast === null || actual === forecast) {
+    return { outcome: 'In Line', quality: 'Neutral', strength: 'Neutral' };
+  }
+  const lowerIsBetter = LOWER_IS_BETTER.test(a.event || '');
+  const beat = lowerIsBetter ? actual < forecast : actual > forecast;
+  return {
+    outcome:  beat ? 'Beat' : 'Miss',
+    quality:  beat ? 'Good Data' : 'Bad Data',
+    strength: 'Strong Data',
+  };
+}
+
+// ── CLEAN ACTUALS — today's releases only, noise stripped ────────────
+const rawActualsToday = (actualsNode.actualsData || []).filter(a => a.event_date === date);
+
+const cleanedActuals = rawActualsToday
+  .map(a => ({ ...a, event: a.event_name }))
+  .filter(a => {
+    // Skip events where actual is "0" AND forecast is "0" — these are speeches/non-numeric
+    const actualNum   = parseFloat(a.actual);
+    const forecastNum = parseFloat(a.forecast);
+    if (actualNum === 0 && forecastNum === 0) return false;
+    // Skip if actual is literally "0" and previous is also "0" — no data
+    if (a.actual === '0' && a.previous === '0') return false;
+    // Must have a real currency and a released actual value
+    if (!a.currency || a.currency === '') return false;
+    if (!a.actual || a.actual === '') return false;
+    return true;
+  })
+  .map(a => ({ ...a, ...classifyActual(a) }));
+
+console.log(`Actuals: ${actualsNode.actualsData?.length || 0} total in sheet | ${rawActualsToday.length} today → ${cleanedActuals.length} clean`);
 cleanedActuals.forEach(a =>
   console.log(`  ${a.currency} | ${a.event} | actual: ${a.actual} | outcome: ${a.outcome}`)
 );
@@ -275,10 +307,12 @@ console.log(`Prompt v3 built. Actuals: ${cleanedActuals.length} | Calendar: ${hi
       chainContext: chainContextToday.join('\n') || ''
     },
     sentimentContext: {
-      breaking: [], // Will be filled by filterNews
+      breaking: (newsNode.breakingNews || []).map(a => a.title).filter(Boolean),
       bullish: [],
       bearish: [],
-      summary: calendarSummary || ''
+      summary: newsNode.stats
+        ? `${newsNode.stats.matched} forex-relevant articles matched today (${newsNode.stats.breaking} breaking).`
+        : ''
     },
     positioningContext: {
       cotData: cotData,

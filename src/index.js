@@ -1,4 +1,4 @@
-﻿const cron = require('node-cron');
+const cron = require('node-cron');
 const config = require('./config');
 const { runWorkflow } = require('./runWorkflow');
 const { tickEventWatcher } = require('./eventTicker');
@@ -14,15 +14,18 @@ async function main() {
   // Dashboard-only mode: serve the dashboard without running the workflow scheduler
   if (dashboardOnly) {
     console.log('Starting dashboard server (no workflow scheduling)...');
-    const dashboard = createDashboardApp(3000);
+    const dashboard = createDashboardApp(process.env.PORT || 3000);
     await dashboard.start();
     return;
   }
 
   // Dashboard + scheduler mode
+  const { pruneOldState } = require('./eventWatcher');
+  pruneOldState();
+
   let dashboard = null;
   if (withDashboard) {
-    dashboard = createDashboardApp(3000);
+    dashboard = createDashboardApp(process.env.PORT || 3000);
     await dashboard.start();
   }
 
@@ -66,7 +69,7 @@ async function main() {
     { timezone: config.schedule.timezone }
   );
 
-  // Keep the process alive â€” node-cron's schedule() already does this via
+  // Keep the process alive — node-cron's schedule() already does this via
   // its internal timer, but this log makes the "still running" state explicit.
   console.log('Scheduler is active and waiting for the next trigger time.');
 }

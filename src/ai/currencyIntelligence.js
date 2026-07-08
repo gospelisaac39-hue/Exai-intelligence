@@ -25,8 +25,8 @@ function getCurrencyIntel(currency) {
  */
 function formatCotLine(cotEntry) {
   if (!cotEntry) return null;
-  const instrument = cotEntry.instrument || cotEntry.pair || 'Unknown';
-  const netLong = cotEntry.netLong || 0;
+  const instrument = cotEntry.label || cotEntry.pair || 'Unknown';
+  const netLong = cotEntry.net || 0;
   const direction = netLong > 0 ? 'net long' : netLong < 0 ? 'net short' : 'balanced';
   const lean = netLong > 0 ? 'leaning bullish' : netLong < 0 ? 'leaning bearish' : 'no clear lean';
   return `${instrument}: institutions ${direction}, ${lean}.`;
