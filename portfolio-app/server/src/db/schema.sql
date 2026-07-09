@@ -63,7 +63,16 @@ CREATE TABLE IF NOT EXISTS insights (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS watched_assets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  symbol TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(user_id, symbol)
+);
+
 CREATE INDEX IF NOT EXISTS idx_connected_accounts_user ON connected_accounts(user_id);
 CREATE INDEX IF NOT EXISTS idx_daily_snapshots_account_date ON daily_snapshots(connected_account_id, snapshot_date);
 CREATE INDEX IF NOT EXISTS idx_trades_account_close ON trades(connected_account_id, close_time);
 CREATE INDEX IF NOT EXISTS idx_insights_user ON insights(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_watched_assets_user ON watched_assets(user_id);

@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth.jsx';
+import { api } from '../api/client';
 import AuthLayout, { FormError, SubmitButton } from '../components/AuthLayout.jsx';
+import AssetPicker from '../components/AssetPicker.jsx';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF'];
 
@@ -17,15 +19,28 @@ export default function Onboarding() {
   const navigate = useNavigate();
   const [baseCurrency, setBaseCurrency] = useState('USD');
   const [traderType, setTraderType] = useState('');
+  const [catalog, setCatalog] = useState([]);
+  const [assets, setAssets] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    api
+      .get('/api/assets')
+      .then(({ catalog }) => setCatalog(catalog))
+      .catch(() => setCatalog([]));
+  }, []);
 
   const onSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    if (assets.length === 0) {
+      setError('Select at least one asset you trade');
+      return;
+    }
     setLoading(true);
     try {
-      await completeOnboarding({ baseCurrency, traderType: traderType || undefined });
+      await completeOnboarding({ baseCurrency, traderType: traderType || undefined, assets });
       navigate('/', { replace: true });
     } catch (err) {
       setError(err.message || 'Unable to save');
@@ -53,6 +68,11 @@ export default function Onboarding() {
             ))}
           </select>
         </label>
+
+        <div className="mb-6">
+          <span className="mb-2 block text-sm font-medium text-slate-400">Which assets do you trade?</span>
+          <AssetPicker catalog={catalog} selected={assets} onChange={setAssets} />
+        </div>
 
         <div className="mb-6">
           <span className="mb-2 block text-sm font-medium text-slate-400">What best describes you? (optional)</span>

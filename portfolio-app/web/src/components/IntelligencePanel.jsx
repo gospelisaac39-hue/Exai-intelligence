@@ -1,4 +1,5 @@
 import React from 'react';
+import TradingViewMiniWidget from './TradingViewMiniWidget.jsx';
 
 const BIAS_PILL = {
   LONG: 'border-emerald-900/50 bg-emerald-950/40 text-emerald-400',
@@ -18,6 +19,12 @@ const IMPACT_STYLES = {
   low: 'border-base-700 bg-base-850 text-slate-500',
 };
 
+const RISK_LABEL_STYLES = {
+  'RISK-ON': 'text-emerald-400',
+  'RISK-OFF': 'text-red-400',
+  NEUTRAL: 'text-amber-400',
+};
+
 function CommentaryBlock({ label, text, accentClass }) {
   return (
     <div className={`border-l-2 pl-3 ${accentClass}`}>
@@ -27,9 +34,74 @@ function CommentaryBlock({ label, text, accentClass }) {
   );
 }
 
+function RiskGauge({ riskGauge }) {
+  if (!riskGauge) return null;
+  return (
+    <div className="w-full max-w-[240px] shrink-0">
+      <div className="flex items-center justify-between text-xs text-slate-500">
+        <span>Risk Gauge</span>
+        <span className={`font-mono font-semibold ${RISK_LABEL_STYLES[riskGauge.label] || 'text-slate-300'}`}>
+          {riskGauge.label}
+        </span>
+      </div>
+      <div className="relative mt-1.5 h-1.5 overflow-hidden rounded-full bg-gradient-to-r from-red-500 via-amber-400 to-emerald-500 opacity-30">
+        <div className="absolute inset-0 bg-base-950" style={{ clipPath: `inset(0 0 0 ${riskGauge.score}%)` }} />
+      </div>
+      <div className="mt-1 text-right text-[10px] text-slate-500">Risk-off ← {riskGauge.score} → Risk-on</div>
+    </div>
+  );
+}
+
+function AssetCard({ asset }) {
+  const biasClass = asset.bias === 'LONG' ? 'bias-long' : asset.bias === 'SHORT' ? 'bias-short' : null;
+  return (
+    <div className="rounded-lg border border-base-700 bg-base-850 p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-sm font-semibold text-slate-100">{asset.label}</span>
+        {asset.hasAnalysis ? (
+          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${BIAS_PILL[asset.bias]}`}>
+            {asset.bias}
+          </span>
+        ) : (
+          <span className="rounded-full border border-base-700 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-500">
+            Watching
+          </span>
+        )}
+      </div>
+
+      {asset.tvSymbol && <TradingViewMiniWidget symbol={asset.tvSymbol} height={110} />}
+
+      {asset.hasAnalysis && asset.conviction != null && (
+        <div className="mt-3">
+          <div className="flex items-center justify-between text-[10px] text-slate-500">
+            <span>Conviction</span>
+            <span className="font-mono text-slate-300">{asset.conviction}%</span>
+          </div>
+          <div className="mt-1 h-1 overflow-hidden rounded-full bg-white/5">
+            <div
+              className="h-full rounded-full"
+              style={{ width: `${asset.conviction}%`, background: BIAS_BAR[asset.bias] }}
+            />
+          </div>
+        </div>
+      )}
+
+      <p className="mt-3 text-xs leading-relaxed text-slate-400">{asset.note}</p>
+
+      {asset.hasAnalysis && asset.briefingText && (
+        <div className="mt-3 space-y-2 border-t border-base-700 pt-3">
+          <CommentaryBlock label="Fundamental" text={asset.briefingText.fundamental} accentClass="border-accent" />
+          <CommentaryBlock label="Sentiment" text={asset.briefingText.sentiment} accentClass="border-purple-500" />
+          <CommentaryBlock label="Positioning" text={asset.briefingText.positioning} accentClass="border-cyan-400" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function IntelligencePanel({ intelligence }) {
   if (!intelligence) return null;
-  const { timestamp, runType, isMajorNewsDay, pair, briefingText, conviction, calendarWeek } = intelligence;
+  const { timestamp, runType, isMajorNewsDay, riskGauge, assets, calendarWeek } = intelligence;
 
   const generated = timestamp
     ? new Date(timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -37,7 +109,7 @@ export default function IntelligencePanel({ intelligence }) {
 
   return (
     <div className="overflow-hidden rounded-xl border border-base-700 bg-base-900">
-      {/* Hero: bias + conviction, black-orbit backdrop */}
+      {/* Hero: macro status + risk gauge, black-orbit backdrop */}
       <div className="exai-orbit bg-base-950 px-5 py-6">
         <div className="relative z-10">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -64,43 +136,27 @@ export default function IntelligencePanel({ intelligence }) {
           </div>
 
           <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xl font-semibold text-slate-100">{pair.name}</span>
-                <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide ${BIAS_PILL[pair.bias]}`}>
-                  {pair.bias}
-                </span>
-              </div>
-              <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-400">{pair.note}</p>
-            </div>
-
-            <div className="w-full max-w-[220px] shrink-0">
-              <div className="flex items-center justify-between text-xs text-slate-500">
-                <span>Conviction</span>
-                <span className="font-mono text-slate-300">{conviction.score}%</span>
-              </div>
-              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/5">
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{ width: `${conviction.score}%`, background: BIAS_BAR[pair.bias] }}
-                />
-              </div>
-              <div className="mt-1 text-xs text-slate-500">{conviction.description}</div>
-            </div>
+            <p className="max-w-xl text-sm leading-relaxed text-slate-400">
+              Live prices and analysis for the assets you're watching — see below.
+            </p>
+            <RiskGauge riskGauge={riskGauge} />
           </div>
         </div>
       </div>
 
-      {/* Analyst commentary */}
-      <div className="grid grid-cols-1 gap-4 border-t border-base-700 p-5 sm:grid-cols-2">
-        <CommentaryBlock label="Fundamental Analyst" text={briefingText.fundamental} accentClass="border-accent" />
-        <CommentaryBlock label="Sentiment Analyst" text={briefingText.sentiment} accentClass="border-purple-500" />
-        <CommentaryBlock label="Positioning Analyst" text={briefingText.positioning} accentClass="border-cyan-400" />
-        <CommentaryBlock
-          label="Risk Desk — Bull vs Bear"
-          text={`Bull: ${briefingText.bullCase}\n\nBear: ${briefingText.bearCase}`}
-          accentClass="border-emerald-500"
-        />
+      {/* Per-asset watchlist */}
+      <div className="border-t border-base-700 p-5">
+        {!assets || assets.length === 0 ? (
+          <p className="text-sm text-slate-500">
+            No watched assets yet — pick what you trade in <a href="/settings" className="text-accent-soft hover:underline">Settings</a>.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {assets.map((asset) => (
+              <AssetCard key={asset.symbol} asset={asset} />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* This week's macro calendar */}

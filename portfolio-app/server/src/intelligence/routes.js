@@ -2,6 +2,8 @@ const express = require('express');
 const path = require('path');
 const axios = require('axios');
 const { requireAuth } = require('../auth/middleware');
+const db = require('../db');
+const { ASSET_CATALOG } = require('../assets/catalog');
 
 // In local dev both apps share one filesystem, so reusing dataStore.js
 // directly (same pattern as calendar/routes.js reusing forexFactory.js)
@@ -59,10 +61,61 @@ function mapConviction(finalDecision) {
   };
 }
 
+// First-pass heuristic, not a full model: sentiment tone (risk-off/
+// risk-on, from the sentiment agent) is the primary signal, nudged by
+// whether today has a major USD event and how much breaking news
+// cleared the severity bar. 50 = neutral; <35 risk-off, >65 risk-on.
+function mapRiskGauge(run) {
+  const tone = (run.agents?.sentiment?.output?.tone || '').toLowerCase();
+  let score = 50;
+
+  if (tone.includes('risk-off')) score -= 25;
+  else if (tone.includes('risk-on')) score += 25;
+
+  if (run.isMajorNewsDay) score -= 10;
+  if ((run.news?.breaking || 0) >= 3) score -= 10;
+
+  score = Math.max(0, Math.min(100, score));
+  const label = score >= 65 ? 'RISK-ON' : score <= 35 ? 'RISK-OFF' : 'NEUTRAL';
+
+  return { score, label };
+}
+
+// The pipeline currently only analyzes one instrument per run, so only
+// the watched asset matching that instrument gets real analysis today —
+// the rest get live price (via TradingView on the frontend) and an
+// honest "not yet analyzed" note rather than fake content. Per-asset
+// analysis for the full catalog is the next phase.
+function mapWatchedAssets(watchedSymbols, run) {
+  const pair = mapPair(run.finalDecision);
+  const briefingText = mapBriefingText(run.agents);
+
+  return watchedSymbols.map((symbol) => {
+    const catalogEntry = ASSET_CATALOG.find((a) => a.symbol === symbol);
+    const hasAnalysis = pair.name === symbol;
+
+    return {
+      symbol,
+      label: catalogEntry?.label || symbol,
+      tvSymbol: catalogEntry?.tvSymbol || null,
+      hasAnalysis,
+      bias: hasAnalysis ? pair.bias : null,
+      conviction: hasAnalysis ? pair.conviction : null,
+      note: hasAnalysis ? pair.note : 'Not analyzed in the most recent run yet.',
+      briefingText: hasAnalysis ? briefingText : null,
+    };
+  });
+}
+
 router.get('/', requireAuth, async (req, res) => {
   try {
     const run = await loadLatestBriefing();
     const calendarWeek = run.calendarWeek && run.calendarWeek.length ? run.calendarWeek : run.calendar || [];
+
+    const watchedSymbols = db
+      .prepare('SELECT symbol FROM watched_assets WHERE user_id = ? ORDER BY id ASC')
+      .all(req.userId)
+      .map((r) => r.symbol);
 
     res.json({
       timestamp: run.timestamp,
@@ -71,6 +124,8 @@ router.get('/', requireAuth, async (req, res) => {
       pair: mapPair(run.finalDecision),
       briefingText: mapBriefingText(run.agents),
       conviction: mapConviction(run.finalDecision),
+      riskGauge: mapRiskGauge(run),
+      assets: mapWatchedAssets(watchedSymbols, run),
       cotData: run.cotData || [],
       fedwatchData: run.fedwatchData || [],
       calendarWeek: calendarWeek.slice(0, 40),

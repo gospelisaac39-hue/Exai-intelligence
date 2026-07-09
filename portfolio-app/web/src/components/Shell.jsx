@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../lib/auth.jsx';
 import logo from '../assets/logo.png';
 
@@ -15,6 +16,12 @@ export default function Shell({ children }) {
             <span className="text-sm text-slate-500">Portfolio Intelligence</span>
           </div>
           <div className="flex items-center gap-4">
+            <Link
+              to="/settings"
+              className="text-sm text-slate-400 transition hover:text-slate-200"
+            >
+              Settings
+            </Link>
             <span className="text-sm text-slate-400">{user?.displayName}</span>
             <button
               onClick={logout}

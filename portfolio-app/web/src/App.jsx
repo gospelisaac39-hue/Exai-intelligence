@@ -6,6 +6,7 @@ import Signup from './pages/Signup.jsx';
 import Onboarding from './pages/Onboarding.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import ConnectAccount from './pages/ConnectAccount.jsx';
+import Settings from './pages/Settings.jsx';
 
 function FullScreenLoader() {
   return (
@@ -56,6 +57,14 @@ export default function App() {
         element={
           <RequireAuth>
             <ConnectAccount />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <RequireAuth>
+            <Settings />
           </RequireAuth>
         }
       />

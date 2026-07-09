@@ -10,6 +10,7 @@ const exposureRoutes = require('./exposure/routes');
 const insightsRoutes = require('./insights/routes');
 const calendarRoutes = require('./calendar/routes');
 const intelligenceRoutes = require('./intelligence/routes');
+const assetsRoutes = require('./assets/routes');
 const connectionManager = require('./metaapi/connectionManager');
 const { scheduleDailySnapshot } = require('./jobs/dailySnapshot');
 const { scheduleTradeSync } = require('./jobs/tradeSync');
@@ -33,6 +34,7 @@ function createApp() {
   app.use('/api/insights', insightsRoutes);
   app.use('/api/calendar', calendarRoutes);
   app.use('/api/intelligence', intelligenceRoutes);
+  app.use('/api/assets', assetsRoutes);
 
   app.use((err, req, res, next) => {
     console.error('[Server]', err);
