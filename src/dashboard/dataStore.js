@@ -38,8 +38,9 @@ function saveWorkflowResult(workflowResult) {
     
     // Data snapshots
     calendar: eventsResult?.allEvents || [],
+    calendarWeek: eventsResult?.weekCalendarAll || [],
     cotData: cotResult?.cotData || [],
-    fedwatchData: fedwatchResult?.fedwatchData || [],
+    fedwatchData: fedwatchResult?.allMeetings || [],
     news: newsResult?.stats || {},
     
     // Email/subscriber info
@@ -150,27 +151,36 @@ function summarizeAgentStatus(agents) {
 }
 
 /**
- * Default briefing when no data has been generated yet
+ * Default briefing when no data has been generated yet.
+ * Shape matches saveWorkflowResult()'s runData exactly, so downstream
+ * consumers (dashboard API routes) don't need to branch on whether a
+ * real run has happened yet.
  */
 function getDefaultBriefing() {
   return {
+    runId: null,
     timestamp: new Date().toISOString(),
+    runType: 'none',
     isMajorNewsDay: false,
-    pairs: [
-      { name: 'EUR / USD', bias: 'LONG', conviction: 72, note: 'Awaiting first workflow run...' },
-      { name: 'GBP / USD', bias: 'LONG', conviction: 58, note: 'Awaiting first workflow run...' },
-      { name: 'USD / JPY', bias: 'SHORT', conviction: 65, note: 'Awaiting first workflow run...' },
-    ],
-    briefing: {
-      technical: 'Waiting for workflow to generate technical analysis...',
-      fundamental: 'Waiting for workflow to generate fundamental analysis...',
-      sentiment: 'Waiting for workflow to generate sentiment analysis...',
-      riskDesk: 'Waiting for workflow to generate risk analysis...',
+    agents: {},
+    finalDecision: {
+      decision: 'HOLD',
+      instrument: 'EUR/USD',
+      conviction: 5,
+      approved: false,
+      thesis: 'Awaiting first workflow run...',
+      positionSize: 'standard',
+      bullArgument: '',
+      bearArgument: '',
     },
-    conviction: { score: 72, label: 'Pending', description: 'First workflow run needed' },
-    cot: [],
-    fedwatch: [],
     calendar: [],
+    calendarWeek: [],
+    cotData: [],
+    fedwatchData: [],
+    news: {},
+    subscribers: 0,
+    emailsSent: 0,
+    errors: [],
   };
 }
 

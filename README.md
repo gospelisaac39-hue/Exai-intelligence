@@ -140,8 +140,22 @@ src/
 scripts/gmailAuth.js      one-time OAuth2 refresh token generator
 ```
 
+## Dashboard
+
+The dashboard lives in `portfolio-app/` (a separate React + Express app),
+not in this repo — see `portfolio-app/README.md` to run it. Its server
+reads `data/latest-run.json` directly from this pipeline (written by every
+run, via `src/dashboard/dataStore.js`) the same way it reads
+`src/sources/forexFactory.js` for the economic calendar — no second
+dashboard server to keep in sync.
+
+The "This Week" macro calendar shown there is the ForexFactory weekly
+feed (`eventsResult.weekCalendarAll`), not the "Exai Indicators" Google
+Sheet — that sheet only holds released economic actuals used to enrich
+the AI prompt, not a calendar.
+
 ## What's next (not yet built)
 
 - Pushing this to GitHub and deploying continuously on Railway
-- An interactive dashboard (separate project — this repo is just the
-  scheduled pipeline)
+- Groq is getting rate-limited (429s) mid-run on some agents — consider
+  a slower stagger or a paid tier

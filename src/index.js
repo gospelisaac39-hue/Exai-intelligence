@@ -2,32 +2,14 @@ const cron = require('node-cron');
 const config = require('./config');
 const { runWorkflow } = require('./runWorkflow');
 const { tickEventWatcher } = require('./eventTicker');
-const { createDashboardApp } = require('./dashboard/server');
 
 const args = process.argv.slice(2);
 const runOnce = args.includes('--once');
 const dryRun = args.includes('--dry-run');
-const withDashboard = args.includes('--dashboard');
-const dashboardOnly = args.includes('--dashboard-only');
 
 async function main() {
-  // Dashboard-only mode: serve the dashboard without running the workflow scheduler
-  if (dashboardOnly) {
-    console.log('Starting dashboard server (no workflow scheduling)...');
-    const dashboard = createDashboardApp(process.env.PORT || 3000);
-    await dashboard.start();
-    return;
-  }
-
-  // Dashboard + scheduler mode
   const { pruneOldState } = require('./eventWatcher');
   pruneOldState();
-
-  let dashboard = null;
-  if (withDashboard) {
-    dashboard = createDashboardApp(process.env.PORT || 3000);
-    await dashboard.start();
-  }
 
   if (runOnce) {
     console.log(`Running once${dryRun ? ' (dry run, no email will be sent)' : ''}...`);
@@ -44,9 +26,6 @@ async function main() {
   console.log(`EXAI Intelligence scheduler starting.`);
   console.log(`Cron schedule: "${config.schedule.cron}" (timezone: ${config.schedule.timezone})`);
   console.log(`This process will stay running and fire the workflow on schedule.`);
-  if (withDashboard) {
-    console.log(`Dashboard available at http://localhost:3000`);
-  }
   console.log(`Press Ctrl+C to stop.\n`);
 
   cron.schedule('*/15 * * * *', async () => {
