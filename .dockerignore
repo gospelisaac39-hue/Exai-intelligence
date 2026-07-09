@@ -1,0 +1,13 @@
+node_modules
+.git
+data
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.env
+.env.local
+*.log
+exai_full_dump.txt
+dumpExai.js
+portfolio-app/web
+portfolio-app/server/data
