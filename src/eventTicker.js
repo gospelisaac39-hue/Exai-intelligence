@@ -14,6 +14,7 @@ const { formatPreAlertEmail } = require('./email/formatPreAlertEmail');
 const { formatPostReleaseEmail } = require('./email/formatPostReleaseEmail');
 const { sendAllEmails } = require('./email/gmail');
 const { updateLiveData } = require('./dashboard/dataStore');
+const { runMarketIntelligenceLayer } = require('./marketIntelligence');
 
 // Finds a released actual for `ev` in the Exai Indicators sheet, which
 // is the real source of truth for actuals (JBlanked-fed) — ForexFactory's
@@ -62,18 +63,32 @@ async function tickEventWatcher() {
   // Severe-headline check runs every tick regardless of the calendar.
   await checkBreakingNews(newsResult).catch((e) => console.error('[Ticker] Breaking news check failed:', e.message));
 
-  if (!rawEvents.length) return;
-
+  // parseEvents([]) still returns a valid (empty) structure, so the
+  // market intelligence layer below runs even if ForexFactory's fetch
+  // failed this tick — prices/bias/news/sentiment must never go quiet
+  // just because the calendar fetch did.
   const parsed = parseEvents(rawEvents);
 
+  const marketIntel = await runMarketIntelligenceLayer({
+    eventsResult: parsed,
+    newsResult,
+    cotResult,
+    fedwatchResult,
+  });
+
   // Keep the dashboard fresh every tick, independent of whether any
-  // alert fires below.
+  // alert fires below. Fields the market intel layer omitted (a failed
+  // fetch/call this tick) are left untouched by the merge in
+  // updateLiveData, preserving the last successful value.
   updateLiveData({
     calendar: parsed.allEvents,
     calendarWeek: parsed.weekCalendarAll,
     cotData: cotResult.cotData || [],
     fedwatchData: fedwatchResult.allMeetings || [],
+    ...marketIntel,
   });
+
+  if (!rawEvents.length) return;
 
   const usdHighToday = parsed.highImpactEvents;
   if (!usdHighToday.length) return;

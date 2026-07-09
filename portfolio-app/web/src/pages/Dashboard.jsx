@@ -10,19 +10,20 @@ import InsightsFeed from '../components/InsightsFeed.jsx';
 import EconomicCalendar from '../components/EconomicCalendar.jsx';
 import IntelligencePanel from '../components/IntelligencePanel.jsx';
 
-function NoAccountsBanner() {
+// Spec Section 6: no accounts connected must show ONE connect CTA card,
+// never six empty/zero portfolio modules — the market layer above
+// already fills the page with real content.
+function ConnectAccountCTA() {
   return (
-    <div className="flex items-center justify-between rounded-xl border border-dashed border-base-700 bg-base-900/40 px-5 py-4">
-      <div>
-        <div className="text-sm font-medium text-slate-200">No accounts connected yet</div>
-        <p className="mt-0.5 text-sm text-slate-500">
-          Everything below is live once you connect a read-only investor login. EXAI can never
-          place, modify, or close a trade.
-        </p>
-      </div>
+    <div className="rounded-xl border border-dashed border-base-700 bg-base-900/40 p-6 text-center">
+      <div className="text-sm font-medium text-slate-200">See your book scored against today's bias</div>
+      <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
+        Connect a read-only investor login and EXAI scores your trades against the market intelligence above — with
+        or without a connection, EXAI can never place, modify, or close a trade.
+      </p>
       <Link
         to="/connect"
-        className="shrink-0 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent-soft"
+        className="mt-4 inline-block rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent-soft"
       >
         + Connect Your First Account
       </Link>
@@ -110,6 +111,8 @@ export default function Dashboard() {
     }
   };
 
+  const hasAccounts = accounts !== null && accounts.length > 0;
+
   return (
     <Shell>
       {error && (
@@ -118,33 +121,41 @@ export default function Dashboard() {
         </div>
       )}
 
-      {accounts === null ? (
-        <div className="py-24 text-center text-sm text-slate-500">Loading your portfolio…</div>
-      ) : (
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h1 className="text-lg font-semibold text-slate-100">Portfolio Overview</h1>
-            {accounts.length > 0 && (
-              <Link
-                to="/connect"
-                className="rounded-md border border-base-700 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-accent hover:text-accent-soft"
-              >
-                + Connect account
-              </Link>
-            )}
-          </div>
-
-          {accounts.length === 0 && <NoAccountsBanner />}
-
-          <SummaryBar summary={summary} />
-          <IntelligencePanel intelligence={intelligence} />
-          <ExposurePanel exposure={exposure} />
-          <PerformanceList performance={performance} period={period} onPeriodChange={setPeriod} />
-          <PositionsTable positions={positions} />
-          <InsightsFeed insights={insights} onRefresh={refreshInsights} refreshing={refreshingInsights} />
-          <EconomicCalendar calendar={calendar} />
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-lg font-semibold text-slate-100">EXAI Terminal</h1>
+          {hasAccounts && (
+            <Link
+              to="/connect"
+              className="rounded-md border border-base-700 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-accent hover:text-accent-soft"
+            >
+              + Connect account
+            </Link>
+          )}
         </div>
-      )}
+
+        {/* Market layer — always alive, zero accounts required */}
+        <IntelligencePanel intelligence={intelligence} />
+
+        {/* Portfolio strip — the premium upgrade moment, not the entry requirement */}
+        {accounts === null ? null : !hasAccounts ? (
+          <ConnectAccountCTA />
+        ) : (
+          <div className="space-y-6">
+            <SummaryBar summary={summary} />
+            <ExposurePanel exposure={exposure} riskGauge={intelligence?.riskGauge} />
+            <PerformanceList performance={performance} period={period} onPeriodChange={setPeriod} />
+            <PositionsTable positions={positions} />
+            <InsightsFeed
+              insights={insights}
+              onRefresh={refreshInsights}
+              refreshing={refreshingInsights}
+              marketNewsFeed={intelligence?.newsFeed}
+            />
+            <EconomicCalendar calendar={calendar} />
+          </div>
+        )}
+      </div>
     </Shell>
   );
 }

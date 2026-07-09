@@ -27,7 +27,10 @@ export default function Onboarding() {
   useEffect(() => {
     api
       .get('/api/assets')
-      .then(({ catalog }) => setCatalog(catalog))
+      .then(({ catalog, defaultWatchlist }) => {
+        setCatalog(catalog);
+        setAssets(defaultWatchlist || []);
+      })
       .catch(() => setCatalog([]));
   }, []);
 

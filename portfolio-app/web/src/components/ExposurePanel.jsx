@@ -57,7 +57,7 @@ function ExposureBar({ item }) {
   );
 }
 
-export default function ExposurePanel({ exposure }) {
+export default function ExposurePanel({ exposure, riskGauge }) {
   if (!exposure) return null;
   const { breakdown, concentrationWarnings, risk } = exposure;
 
@@ -73,7 +73,10 @@ export default function ExposurePanel({ exposure }) {
       </div>
 
       {breakdown.length === 0 ? (
-        <p className="text-sm text-slate-500">No open positions to compute exposure from yet.</p>
+        <p className="text-sm text-slate-500">
+          Book is flat.
+          {riskGauge ? ` Market is ${riskGauge.label.toLowerCase()} (${riskGauge.score}) — bias board below.` : ' See the bias board below for today\'s market read.'}
+        </p>
       ) : (
         <div className="mb-4">
           {breakdown.map((item) => (

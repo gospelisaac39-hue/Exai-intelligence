@@ -2,7 +2,7 @@ const express = require('express');
 const { z } = require('zod');
 const db = require('../db');
 const { requireAuth } = require('../auth/middleware');
-const { ASSET_CATALOG, VALID_SYMBOLS } = require('./catalog');
+const { ASSET_CATALOG, VALID_SYMBOLS, DEFAULT_WATCHLIST } = require('./catalog');
 
 const router = express.Router();
 
@@ -13,9 +13,11 @@ function getWatchedSymbols(userId) {
     .map((r) => r.symbol);
 }
 
-// GET: the full catalog (for the picker UI) plus the user's current selections
+// GET: the full catalog (for the picker UI) plus the user's current
+// selections and the spec's default watchlist (for pre-selecting new
+// users at onboarding, before they've saved anything of their own)
 router.get('/', requireAuth, (req, res) => {
-  res.json({ catalog: ASSET_CATALOG, watched: getWatchedSymbols(req.userId) });
+  res.json({ catalog: ASSET_CATALOG, watched: getWatchedSymbols(req.userId), defaultWatchlist: DEFAULT_WATCHLIST });
 });
 
 const watchlistSchema = z.object({

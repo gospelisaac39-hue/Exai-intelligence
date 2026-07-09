@@ -19,8 +19,29 @@ const { weeklyHighlights } = require('./ai/agents/weeklyHighlights');
 const { formatQuietDayEmail } = require('./email/formatQuietDayEmail');
 const { sendAllEmails } = require('./email/gmail');
 const { saveWorkflowResult, logRunToSheet } = require('./dashboard/dataStore');
+const { runMarketIntelligenceLayer } = require('./marketIntelligence');
 
 const config = require('./config');
+
+/**
+ * Fetches Telegram + COT + FedWatch and filters news — shared by the
+ * weekend/week-ahead branches so the always-on market intelligence
+ * layer (bias board, news feed, sentiment, prices) has real context
+ * every day, not just on standard weekday runs.
+ */
+async function fetchSharedIntelSources() {
+  const [telegramHtml, cotResult, fedwatchResult] = await Promise.all([
+    fetchTelegram().catch((e) => {
+      console.log('[Telegram] failed:', e.message);
+      return '';
+    }),
+    fetchAndParseCOT(),
+    fetchFedWatch(),
+  ]);
+  const telegramParsed = parseTelegram(telegramHtml);
+  const newsResult = filterAndCategorizeNews(telegramParsed.telegramArticles);
+  return { newsResult, cotResult, fedwatchResult };
+}
 
 /**
  * Runs the full EXAI pipeline once, end to end. Branches by run type:
@@ -84,13 +105,30 @@ async function runWorkflow({ dryRun = false } = {}) {
       sendResultsWknd = await sendAllEmails(emailItemsWknd);
     }
 
+    const { newsResult: newsResultWknd, cotResult: cotResultWknd, fedwatchResult: fedwatchResultWknd } = await fetchSharedIntelSources();
+    const marketIntelWknd = await runMarketIntelligenceLayer({
+      eventsResult: eventsResultWknd,
+      newsResult: newsResultWknd,
+      cotResult: cotResultWknd,
+      fedwatchResult: fedwatchResultWknd,
+    });
+
     const elapsedSecWknd = ((Date.now() - startedAt) / 1000).toFixed(1);
     console.log('\nWORKFLOW RUN COMPLETE in ' + elapsedSecWknd + 's');
     console.log('  Run type: weekend');
     console.log('  Subscribers: ' + subscribersWknd.length);
     console.log('  Emails sent: ' + sendResultsWknd.filter((r) => r.ok).length + '/' + sendResultsWknd.length + '\n');
 
-    const resultWknd = { runTypeInfo, eventsResult: eventsResultWknd, emailItems: emailItemsWknd, sendResults: sendResultsWknd };
+    const resultWknd = {
+      runTypeInfo,
+      eventsResult: eventsResultWknd,
+      newsResult: newsResultWknd,
+      cotResult: cotResultWknd,
+      fedwatchResult: fedwatchResultWknd,
+      emailItems: emailItemsWknd,
+      sendResults: sendResultsWknd,
+      ...marketIntelWknd,
+    };
     const savedWknd = saveWorkflowResult(resultWknd);
     await logRunToSheet(savedWknd);
     return resultWknd;
@@ -123,6 +161,9 @@ async function runWorkflow({ dryRun = false } = {}) {
       sendResults = await sendAllEmails(emailItems);
     }
 
+    const { newsResult, cotResult, fedwatchResult } = await fetchSharedIntelSources();
+    const marketIntel = await runMarketIntelligenceLayer({ eventsResult, newsResult, cotResult, fedwatchResult });
+
     const elapsedSec = ((Date.now() - startedAt) / 1000).toFixed(1);
     console.log(`\nWORKFLOW RUN COMPLETE in ${elapsedSec}s`);
     console.log(`  Run type: ${runTypeInfo.runType}`);
@@ -130,7 +171,7 @@ async function runWorkflow({ dryRun = false } = {}) {
     console.log(`  Subscribers: ${subscribers.length}`);
     console.log(`  Emails sent: ${sendResults.filter((r) => r.ok).length}/${sendResults.length}\n`);
 
-    const result = { runTypeInfo, eventsResult, emailItems, sendResults };
+    const result = { runTypeInfo, eventsResult, newsResult, cotResult, fedwatchResult, emailItems, sendResults, ...marketIntel };
     const saved = saveWorkflowResult(result);
     await logRunToSheet(saved);
     return result;
@@ -210,6 +251,19 @@ async function runWorkflow({ dryRun = false } = {}) {
     sendResults = await sendAllEmails(emailItems);
   }
 
+  // Always-on market intelligence layer — prices, bias board, news
+  // feed, sentiment score — runs regardless of isMajorNewsDay. That
+  // gate only controls whether the deeper single-instrument debate
+  // above runs; the dashboard must never be empty just because today
+  // was quiet (spec Section 3's "golden rule").
+  const marketIntel = await runMarketIntelligenceLayer({
+    eventsResult,
+    newsResult,
+    cotResult,
+    fedwatchResult,
+    sentimentAgentTone: aiResult.agents?.sentiment?.output?.tone,
+  });
+
   const elapsedSec = ((Date.now() - startedAt) / 1000).toFixed(1);
   console.log(`\nWORKFLOW RUN COMPLETE in ${elapsedSec}s`);
   console.log(`  Run type: ${runTypeInfo.runType}`);
@@ -220,7 +274,19 @@ async function runWorkflow({ dryRun = false } = {}) {
   console.log(`  Subscribers: ${subscribers.length}`);
   console.log(`  Emails sent: ${sendResults.filter((r) => r.ok).length}/${sendResults.length}\n`);
 
-  const result = { runTypeInfo, eventsResult, newsResult, cotResult, fedwatchResult, promptResult, aiResult, emailItems, sendResults, isMajorNewsDay };
+  const result = {
+    runTypeInfo,
+    eventsResult,
+    newsResult,
+    cotResult,
+    fedwatchResult,
+    promptResult,
+    aiResult,
+    emailItems,
+    sendResults,
+    isMajorNewsDay,
+    ...marketIntel,
+  };
   const saved = saveWorkflowResult(result);
   await logRunToSheet(saved);
   return result;

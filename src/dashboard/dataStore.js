@@ -24,29 +24,48 @@ function saveWorkflowResult(workflowResult) {
   const runFilepath = path.join(DATA_DIR, `${runId}.json`);
 
   // Extract what we need from the workflow result
-  const { eventsResult, cotResult, fedwatchResult, aiResult, isMajorNewsDay, newsResult, emailItems } = workflowResult;
+  const { eventsResult, cotResult, fedwatchResult, aiResult, isMajorNewsDay, newsResult, emailItems, prices, biasBoard, newsFeed, sentimentScore, pricesUpdatedAt, biasBoardUpdatedAt, newsFeedUpdatedAt, sentimentScoreUpdatedAt } = workflowResult;
+
+  // The always-on market intelligence fields degrade rather than
+  // disappear (spec Section 0.2): if this run's fetch/AI call for a
+  // given piece failed, workflowResult won't have that key at all
+  // (see marketIntelligence.js), so we fall back to whatever was last
+  // successfully saved instead of blanking it out.
+  const previous = loadLatestBriefing();
 
   const runData = {
     runId,
     timestamp: new Date().toISOString(),
     runType: workflowResult.runTypeInfo?.runType || 'unknown',
     isMajorNewsDay: isMajorNewsDay || false,
-    
-    // Agent outputs (multi-agent debate pipeline)
+
+    // Agent outputs (multi-agent debate pipeline — single instrument,
+    // deep dive, gated by isMajorNewsDay)
     agents: aiResult?.agents || {},
     finalDecision: aiResult?.finalDecision || { decision: 'HOLD' },
-    
+
+    // Always-on market intelligence layer (spec Section 3) — one entry
+    // per catalog asset, never gated, refreshed every 15 min
+    prices: prices || previous.prices || [],
+    pricesUpdatedAt: pricesUpdatedAt || previous.pricesUpdatedAt || null,
+    biasBoard: biasBoard || previous.biasBoard || [],
+    biasBoardUpdatedAt: biasBoardUpdatedAt || previous.biasBoardUpdatedAt || null,
+    newsFeed: newsFeed || previous.newsFeed || [],
+    newsFeedUpdatedAt: newsFeedUpdatedAt || previous.newsFeedUpdatedAt || null,
+    sentimentScore: sentimentScore || previous.sentimentScore || null,
+    sentimentScoreUpdatedAt: sentimentScoreUpdatedAt || previous.sentimentScoreUpdatedAt || null,
+
     // Data snapshots
     calendar: eventsResult?.allEvents || [],
     calendarWeek: eventsResult?.weekCalendarAll || [],
     cotData: cotResult?.cotData || [],
     fedwatchData: fedwatchResult?.allMeetings || [],
     news: newsResult?.stats || {},
-    
+
     // Email/subscriber info
     subscribers: emailItems?.length || 0,
     emailsSent: workflowResult.sendResults?.filter(r => r.ok).length || 0,
-    
+
     // Errors
     errors: aiResult?.errors || []
   };
@@ -192,6 +211,14 @@ function getDefaultBriefing() {
       bullArgument: '',
       bearArgument: '',
     },
+    prices: [],
+    pricesUpdatedAt: null,
+    biasBoard: [],
+    biasBoardUpdatedAt: null,
+    newsFeed: [],
+    newsFeedUpdatedAt: null,
+    sentimentScore: null,
+    sentimentScoreUpdatedAt: null,
     calendar: [],
     calendarWeek: [],
     cotData: [],

@@ -24,47 +24,38 @@ async function loadLatestBriefing() {
 
 const router = express.Router();
 
-// The pipeline trades one instrument per run (via the trader/risk-manager
-// agents), not a multi-pair grid — this derives a single bias card from
-// the final decision rather than inventing pairs that don't exist.
+// The single-instrument multi-agent debate (fundamentals/sentiment/
+// positioning/bull/bear/trader/risk) — still the deepest analysis
+// available, gated to major news days for one instrument per run.
+// Kept separate from the always-on per-asset bias board below.
 function mapPair(finalDecision) {
   const fd = finalDecision || {};
   const decision = fd.decision || 'HOLD';
   const bias = decision.includes('SHORT') ? 'SHORT' : decision.includes('LONG') ? 'LONG' : 'HOLD';
   return {
-    name: fd.instrument || 'EUR/USD',
+    name: fd.instrument || null,
     bias,
     conviction: Math.round((fd.conviction || 5) * 10),
-    note: fd.thesis || 'Awaiting analysis...',
+    note: fd.thesis || null,
   };
 }
 
 function mapBriefingText(agents) {
   const a = agents || {};
-  const bull = a.bullCase?.output?.argument || '';
-  const bear = a.bearCase?.output?.argument || '';
+  const bull = a.bullCase?.output?.argument || null;
+  const bear = a.bearCase?.output?.argument || null;
   return {
-    positioning: a.positioning?.output?.reasoning || 'No positioning analysis available',
-    fundamental: a.fundamentals?.output?.reasoning || 'No fundamental analysis available',
-    sentiment: a.sentiment?.output?.reasoning || 'No sentiment analysis available',
-    bullCase: bull || 'Bull case unavailable',
-    bearCase: bear || 'Bear case unavailable',
+    positioning: a.positioning?.output?.reasoning || null,
+    fundamental: a.fundamentals?.output?.reasoning || null,
+    sentiment: a.sentiment?.output?.reasoning || null,
+    bullCase: bull,
+    bearCase: bear,
   };
 }
 
-function mapConviction(finalDecision) {
-  const fd = finalDecision || {};
-  return {
-    score: Math.round((fd.conviction || 5) * 10),
-    label: fd.approved === false ? 'REJECTED' : fd.decision || 'HOLD',
-    description: fd.positionSize ? `Position size: ${fd.positionSize}` : 'Awaiting risk assessment',
-  };
-}
-
-// First-pass heuristic, not a full model: sentiment tone (risk-off/
-// risk-on, from the sentiment agent) is the primary signal, nudged by
-// whether today has a major USD event and how much breaking news
-// cleared the severity bar. 50 = neutral; <35 risk-off, >65 risk-on.
+// Enhanced with the pipeline's deterministic sentiment score's dominant
+// theme when available, falling back to the sentiment-agent-tone
+// heuristic on days the deep debate ran.
 function mapRiskGauge(run) {
   const tone = (run.agents?.sentiment?.output?.tone || '').toLowerCase();
   let score = 50;
@@ -78,33 +69,74 @@ function mapRiskGauge(run) {
   score = Math.max(0, Math.min(100, score));
   const label = score >= 65 ? 'RISK-ON' : score <= 35 ? 'RISK-OFF' : 'NEUTRAL';
 
-  return { score, label };
+  return { score, label, dominantTheme: run.sentimentScore?.dominantTheme || null };
 }
 
-// The pipeline currently only analyzes one instrument per run, so only
-// the watched asset matching that instrument gets real analysis today —
-// the rest get live price (via TradingView on the frontend) and an
-// honest "not yet analyzed" note rather than fake content. Per-asset
-// analysis for the full catalog is the next phase.
+function findCotForSymbol(cotData, symbol) {
+  return (cotData || []).find((c) => c.pair === symbol) || null;
+}
+
+// One entry per watched asset: live price (Yahoo, refreshed every 15
+// min), bias (day/swing, batched Groq call across the whole catalog —
+// not per-user, so this is genuinely the same real analysis every user
+// watching that asset sees), and COT positioning where the pipeline
+// tracks it. Every field degrades to null with its own "updatedAt" if
+// a given tick's fetch failed, rather than ever showing a fake value.
 function mapWatchedAssets(watchedSymbols, run) {
-  const pair = mapPair(run.finalDecision);
-  const briefingText = mapBriefingText(run.agents);
+  const prices = run.prices || [];
+  const biasBoard = run.biasBoard || [];
+  const cotData = run.cotData || [];
 
   return watchedSymbols.map((symbol) => {
     const catalogEntry = ASSET_CATALOG.find((a) => a.symbol === symbol);
-    const hasAnalysis = pair.name === symbol;
+    const price = prices.find((p) => p.symbol === symbol) || null;
+    const bias = biasBoard.find((b) => b.symbol === symbol) || null;
+    const cot = findCotForSymbol(cotData, symbol);
+
+    let changeAbsolute = null;
+    let changePercent = null;
+    if (price && price.price != null && price.previousClose) {
+      changeAbsolute = price.price - price.previousClose;
+      changePercent = (changeAbsolute / price.previousClose) * 100;
+    }
 
     return {
       symbol,
       label: catalogEntry?.label || symbol,
-      tvSymbol: catalogEntry?.tvSymbol || null,
-      hasAnalysis,
-      bias: hasAnalysis ? pair.bias : null,
-      conviction: hasAnalysis ? pair.conviction : null,
-      note: hasAnalysis ? pair.note : 'Not analyzed in the most recent run yet.',
-      briefingText: hasAnalysis ? briefingText : null,
+      category: catalogEntry?.category || null,
+      tvSymbol: catalogEntry?.tv || null,
+      precision: catalogEntry?.precision ?? 4,
+      price: price
+        ? {
+            price: price.price,
+            previousClose: price.previousClose,
+            dayHigh: price.dayHigh,
+            dayLow: price.dayLow,
+            sparkline: price.sparkline || [],
+            changeAbsolute,
+            changePercent,
+          }
+        : null,
+      pricesUpdatedAt: run.pricesUpdatedAt || null,
+      bias: bias ? { dayBias: bias.dayBias, swingBias: bias.swingBias, reason: bias.reason } : null,
+      biasBoardUpdatedAt: run.biasBoardUpdatedAt || null,
+      cot,
     };
   });
+}
+
+// Every headline the news interpreter tagged, most-severe first —
+// frontend filters by impact/watched-asset client-side (spec 4.2).
+function mapNewsFeed(run) {
+  return (run.newsFeed || []).map((item) => ({
+    title: item.title,
+    link: item.link,
+    source: item.source,
+    pubDate: item.pubDate,
+    impact: item.impact,
+    oneLineWhy: item.oneLineWhy,
+    affectedAssets: item.affectedAssets,
+  }));
 }
 
 router.get('/', requireAuth, async (req, res) => {
@@ -123,8 +155,11 @@ router.get('/', requireAuth, async (req, res) => {
       isMajorNewsDay: run.isMajorNewsDay,
       pair: mapPair(run.finalDecision),
       briefingText: mapBriefingText(run.agents),
-      conviction: mapConviction(run.finalDecision),
       riskGauge: mapRiskGauge(run),
+      sentimentScore: run.sentimentScore || null,
+      sentimentScoreUpdatedAt: run.sentimentScoreUpdatedAt || null,
+      newsFeed: mapNewsFeed(run),
+      newsFeedUpdatedAt: run.newsFeedUpdatedAt || null,
       assets: mapWatchedAssets(watchedSymbols, run),
       cotData: run.cotData || [],
       fedwatchData: run.fedwatchData || [],

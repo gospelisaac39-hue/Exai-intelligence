@@ -11,7 +11,7 @@ const COT_URL =
 
 const INSTRUMENTS = [
   { match: 'GOLD', label: 'Gold', emoji: '🥇', pair: 'XAU/USD' },
-  { match: 'CRUDE OIL', label: 'WTI Crude', emoji: '🛢', pair: 'WTI/USD' },
+  { match: 'CRUDE OIL', label: 'WTI Crude', emoji: '🛢', pair: 'WTI' },
   { match: 'DOLLAR INDEX', label: 'DXY', emoji: '💵', pair: 'DXY' },
   { match: 'EURO FX', label: 'EUR/USD', emoji: '🇪🇺', pair: 'EUR/USD' },
   { match: 'BRITISH POUND', label: 'GBP/USD', emoji: '🇬🇧', pair: 'GBP/USD' },
