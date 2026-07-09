@@ -1,13 +1,24 @@
 const express = require('express');
 const path = require('path');
+const axios = require('axios');
 const { requireAuth } = require('../auth/middleware');
 
-// Reuses the existing pipeline's saved run data (src/dashboard/dataStore.js)
-// instead of running a second dashboard server — same pattern as
-// calendar/routes.js reusing forexFactory.js directly.
-const { loadLatestBriefing } = require(
+// In local dev both apps share one filesystem, so reusing dataStore.js
+// directly (same pattern as calendar/routes.js reusing forexFactory.js)
+// works. In production the pipeline and this server are separate
+// Railway services with separate filesystems — EXAI_DATA_URL points at
+// the pipeline's internal data endpoint (src/dataServer.js) instead.
+const { loadLatestBriefing: loadLocalBriefing } = require(
   path.join(__dirname, '../../../../src/dashboard/dataStore')
 );
+
+async function loadLatestBriefing() {
+  if (process.env.EXAI_DATA_URL) {
+    const { data } = await axios.get(`${process.env.EXAI_DATA_URL}/latest-run.json`, { timeout: 5000 });
+    return data;
+  }
+  return loadLocalBriefing();
+}
 
 const router = express.Router();
 
@@ -48,9 +59,9 @@ function mapConviction(finalDecision) {
   };
 }
 
-router.get('/', requireAuth, (req, res) => {
+router.get('/', requireAuth, async (req, res) => {
   try {
-    const run = loadLatestBriefing();
+    const run = await loadLatestBriefing();
     const calendarWeek = run.calendarWeek && run.calendarWeek.length ? run.calendarWeek : run.calendar || [];
 
     res.json({

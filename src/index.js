@@ -2,6 +2,7 @@ const cron = require('node-cron');
 const config = require('./config');
 const { runWorkflow } = require('./runWorkflow');
 const { tickEventWatcher } = require('./eventTicker');
+const { startDataServer } = require('./dataServer');
 
 const args = process.argv.slice(2);
 const runOnce = args.includes('--once');
@@ -27,6 +28,8 @@ async function main() {
   console.log(`Cron schedule: "${config.schedule.cron}" (timezone: ${config.schedule.timezone})`);
   console.log(`This process will stay running and fire the workflow on schedule.`);
   console.log(`Press Ctrl+C to stop.\n`);
+
+  startDataServer();
 
   cron.schedule('*/15 * * * *', async () => {
     try {
