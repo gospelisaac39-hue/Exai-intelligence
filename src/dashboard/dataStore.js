@@ -79,6 +79,25 @@ function loadLatestBriefing() {
 }
 
 /**
+ * Merges fresh live-data fields (calendar, COT, FedWatch, etc.) into the
+ * latest saved run without touching agents/finalDecision — called every
+ * 15 min from the ticker so the dashboard reflects near-real-time data
+ * between the twice-daily full AI-analysis runs, which are the only
+ * thing expensive enough (Groq) to keep on a slower cadence.
+ */
+function updateLiveData(partial) {
+  ensureDataDir();
+  const current = loadLatestBriefing();
+  const merged = {
+    ...current,
+    ...partial,
+    timestamp: new Date().toISOString(),
+  };
+  fs.writeFileSync(LATEST_FILE, JSON.stringify(merged, null, 2), 'utf-8');
+  return merged;
+}
+
+/**
  * List all past runs
  */
 function listRuns(limit = 50) {
@@ -184,7 +203,7 @@ function getDefaultBriefing() {
   };
 }
 
-module.exports = { saveWorkflowResult, loadLatestBriefing, listRuns, getRun };
+module.exports = { saveWorkflowResult, loadLatestBriefing, updateLiveData, listRuns, getRun };
 
 /**
  * Appends one row per run to the "RunLog" Google Sheet tab, so runs

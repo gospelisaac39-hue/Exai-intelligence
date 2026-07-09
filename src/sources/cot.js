@@ -45,7 +45,13 @@ async function fetchAndParseCOT() {
   let records = [];
 
   try {
-    const { data } = await axios.get(COT_URL, { headers: { Accept: 'application/json' } });
+    const { data } = await axios.get(COT_URL, {
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+      timeout: 15000,
+    });
     records = Array.isArray(data) ? data : [];
     console.log(`[COT] Records fetched: ${records.length}`);
   } catch (err) {

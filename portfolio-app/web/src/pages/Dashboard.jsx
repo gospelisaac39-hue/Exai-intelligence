@@ -83,9 +83,13 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    if (accounts !== null) {
-      loadDashboardData();
-    }
+    if (accounts === null) return;
+    loadDashboardData();
+    // The pipeline ticks every 15 min; poll well inside that window so
+    // the dashboard (especially the Intelligence panel) reflects a new
+    // run without requiring a manual refresh.
+    const interval = setInterval(loadDashboardData, 60000);
+    return () => clearInterval(interval);
   }, [accounts, loadDashboardData]);
 
   useEffect(() => {

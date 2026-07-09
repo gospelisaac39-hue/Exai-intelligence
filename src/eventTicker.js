@@ -1,43 +1,95 @@
-﻿const { fetchForexFactoryEnhanced } = require('./sources/forexFactory');
+const { fetchForexFactoryEnhanced } = require('./sources/forexFactory');
+const { fetchAndParseCOT } = require('./sources/cot');
+const { fetchFedWatch } = require('./sources/fedwatch');
+const { fetchActuals, getActiveSubscribers } = require('./sources/googleSheets');
+const { fetchTelegram } = require('./sources/telegram');
+const { parseTelegram } = require('./processing/parseTelegram');
+const { filterAndCategorizeNews } = require('./processing/filterNews');
 const { parseEvents } = require('./processing/parseEvents');
+const { preparePrompt } = require('./processing/preparePrompt');
 const { checkEventLifecycle } = require('./eventWatcher');
+const { checkBreakingNews } = require('./newsAlert');
 const { runDebateOrchestration } = require('./ai/orchestrator');
 const { formatPreAlertEmail } = require('./email/formatPreAlertEmail');
 const { formatPostReleaseEmail } = require('./email/formatPostReleaseEmail');
-const { getActiveSubscribers } = require('./sources/googleSheets');
 const { sendAllEmails } = require('./email/gmail');
+const { updateLiveData } = require('./dashboard/dataStore');
+
+// Finds a released actual for `ev` in the Exai Indicators sheet, which
+// is the real source of truth for actuals (JBlanked-fed) — ForexFactory's
+// HTML actuals scrape below is frequently blocked (403) and only used as
+// a fallback. Matches on currency + today's date first exact-name, then
+// fuzzy substring, to avoid mismatching against older rows for an
+// identically-named event on a different day.
+function findSheetActual(ev, actualsRows, todayDateKey) {
+  const evName = ev.event.toUpperCase();
+  const sameDay = actualsRows.filter(
+    (a) => (a.currency || '').toUpperCase() === ev.currency && a.event_date === todayDateKey
+  );
+  let match = sameDay.find((a) => (a.event_name || '').toUpperCase() === evName);
+  if (!match) {
+    match = sameDay.find((a) => {
+      const acName = (a.event_name || '').toUpperCase();
+      return acName.includes(evName) || evName.includes(acName);
+    });
+  }
+  return match && match.actual ? match.actual : null;
+}
 
 /**
- * Runs every 15 minutes. Cheap check - only hits ForexFactory's live
- * actuals scrape, no Groq/Telegram/COT unless a postRelease action
- * actually fires (only then is the full debate worth the API cost).
+ * Runs every 15 minutes. Always refreshes the dashboard's live data
+ * (calendar/COT/FedWatch snapshot — cheap, no Groq) and checks for
+ * severe breaking headlines, then checks whether any high-impact USD
+ * event needs a pre-alert (30 min out) or post-release (5 min after
+ * actual) email. The full multi-agent debate only runs for an actual
+ * post-release event — that's the only case worth the Groq cost.
  */
 async function tickEventWatcher() {
-  const rawEvents = await fetchForexFactoryEnhanced().catch((e) => {
-    console.log('[Ticker] ForexFactory fetch failed:', e.message);
-    return [];
-  });
+  const [rawEvents, cotResult, fedwatchResult, actualsResult, telegramHtml] = await Promise.all([
+    fetchForexFactoryEnhanced().catch((e) => {
+      console.log('[Ticker] ForexFactory fetch failed:', e.message);
+      return [];
+    }),
+    fetchAndParseCOT().catch(() => ({ cotData: [] })),
+    fetchFedWatch().catch(() => ({ allMeetings: [] })),
+    fetchActuals().catch(() => ({ actualsData: [] })),
+    fetchTelegram().catch(() => ''),
+  ]);
+
+  const telegramParsed = parseTelegram(telegramHtml);
+  const newsResult = filterAndCategorizeNews(telegramParsed.telegramArticles);
+
+  // Severe-headline check runs every tick regardless of the calendar.
+  await checkBreakingNews(newsResult).catch((e) => console.error('[Ticker] Breaking news check failed:', e.message));
 
   if (!rawEvents.length) return;
 
   const parsed = parseEvents(rawEvents);
-  const usdHighToday = parsed.highImpactEvents; // already filtered to USD + high + today in parseEvents
 
+  // Keep the dashboard fresh every tick, independent of whether any
+  // alert fires below.
+  updateLiveData({
+    calendar: parsed.allEvents,
+    calendarWeek: parsed.weekCalendarAll,
+    cotData: cotResult.cotData || [],
+    fedwatchData: fedwatchResult.allMeetings || [],
+  });
+
+  const usdHighToday = parsed.highImpactEvents;
   if (!usdHighToday.length) return;
 
-  // Actuals lookup checks the SAME scrape result - other currencies'
-  // actuals are present in `rawEvents` too and get cached implicitly
-  // via parseEvents' allEvents, even though we only alert on USD.
+  const actualsRows = actualsResult.actualsData || [];
+
   function actualsLookup(ev) {
-    const match = rawEvents.find(
-      (r) => (r.currency || '').toUpperCase() === ev.currency &&
-             (r.title || '').toUpperCase() === ev.event.toUpperCase()
+    const sheetActual = findSheetActual(ev, actualsRows, parsed.date);
+    if (sheetActual) return sheetActual;
+    const ffMatch = rawEvents.find(
+      (r) => (r.currency || '').toUpperCase() === ev.currency && (r.title || '').toUpperCase() === ev.event.toUpperCase()
     );
-    return match ? match.actual : null;
+    return ffMatch ? ffMatch.actual : null;
   }
 
   const actions = checkEventLifecycle(usdHighToday, actualsLookup);
-
   if (!actions.length) return;
 
   const subscribers = await getActiveSubscribers().catch(() => []);
@@ -52,23 +104,6 @@ async function tickEventWatcher() {
     if (action.action === 'postRelease') {
       console.log(`[Ticker] Post-release firing for ${action.event.event} - running full debate...`);
       try {
-        const { preparePrompt } = require('./processing/preparePrompt');
-        const { fetchAndParseCOT } = require('./sources/cot');
-        const { fetchFedWatch } = require('./sources/fedwatch');
-        const { fetchActuals } = require('./sources/googleSheets');
-        const { fetchTelegram } = require('./sources/telegram');
-        const { parseTelegram } = require('./processing/parseTelegram');
-        const { filterAndCategorizeNews } = require('./processing/filterNews');
-
-        const [cotResult, fedwatchResult, actualsResult, telegramHtml] = await Promise.all([
-          fetchAndParseCOT(),
-          fetchFedWatch(),
-          fetchActuals().catch(() => ({ actualsData: [] })),
-          fetchTelegram().catch(() => ''),
-        ]);
-
-        const telegramParsed = parseTelegram(telegramHtml);
-        const newsResult = filterAndCategorizeNews(telegramParsed.telegramArticles);
         const promptResult = preparePrompt(parsed, cotResult, fedwatchResult, actualsResult, newsResult);
         const aiResult = await runDebateOrchestration(promptResult);
 
@@ -82,4 +117,3 @@ async function tickEventWatcher() {
 }
 
 module.exports = { tickEventWatcher };
-

@@ -1,3 +1,9 @@
+// Railway's network doesn't route outbound IPv6, but Node's default DNS
+// resolution order can still hand back an IPv6 address for hosts like
+// smtp.gmail.com, causing ENETUNREACH on every send. Force IPv4 first,
+// process-wide, before anything else does a lookup.
+require('dns').setDefaultResultOrder('ipv4first');
+
 const cron = require('node-cron');
 const config = require('./config');
 const { runWorkflow } = require('./runWorkflow');
@@ -10,7 +16,9 @@ const dryRun = args.includes('--dry-run');
 
 async function main() {
   const { pruneOldState } = require('./eventWatcher');
+  const { pruneOldNewsState } = require('./newsAlert');
   pruneOldState();
+  pruneOldNewsState();
 
   if (runOnce) {
     console.log(`Running once${dryRun ? ' (dry run, no email will be sent)' : ''}...`);

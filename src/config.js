@@ -35,7 +35,7 @@ module.exports = {
   },
 
   schedule: {
-    cron: process.env.CRON_SCHEDULE || '0 5,14 * * 1-5',
+    cron: process.env.CRON_SCHEDULE || '0 6,14 * * 1-5',
     timezone: process.env.TIMEZONE || 'Africa/Lagos',
   },
 };
